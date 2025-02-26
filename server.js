@@ -309,6 +309,23 @@ app.get('/api/vendor/dashboard/:user_id', async (req, res) => {
     }
 });
 
+app.get('/api/vendors/type/:vendorType', async (req, res) => {
+    const { vendorType } = req.params;
+
+    try {
+        const vendors = await Vendor.find({ vendorType: vendorType });
+
+        if (vendors.length === 0) {
+            return res.status(404).json({ status: "error", message: "No vendors found for this type" });
+        }
+
+        res.status(200).json({ status: "success", data: vendors });
+    } catch (error) {
+        console.error("Fetch Vendors by Type Error:", error);
+        res.status(500).json({ status: "error", message: "Server error" });
+    }
+});
+
 
 // ✅ SERVER START
 app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
