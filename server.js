@@ -18,7 +18,8 @@ const SECRET_KEY = process.env.JWT_SECRET || 'your_jwt_secret';
 // Connect to database
 connectDB();
 app.use(express.json());
-app.use(cors());
+app.use(cors({ origin: "https://wednest-frontend.vercel.app" }));
+
 
 // Serve uploaded files statically
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -38,6 +39,9 @@ const upload = multer({ storage });
 // Middleware for multiple images (max 5)
 const uploadMultiple = upload.array('serviceImages', 5);
 
+app.get("/", (req, res) => {
+  res.send("Backend is running!");
+});
 
 // ✅ REGISTER API
 app.post('/api/register', async (req, res) => {
@@ -310,10 +314,8 @@ app.get('/api/vendor/dashboard/:user_id', async (req, res) => {
     }
 });
 
-<<<<<<< HEAD
 //✅ Specific type of vendors
-=======
->>>>>>> 717435dc0752c735cc14b47382aeb5828223852a
+
 app.get('/api/vendors/type/:vendorType', async (req, res) => {
     const { vendorType } = req.params;
 
