@@ -19,10 +19,7 @@ const SECRET_KEY = process.env.JWT_SECRET || 'your_jwt_secret';
 connectDB();
 app.use(express.json());
 app.use(cors({ origin: "wednest-frontend.vercel.app" }));
-<<<<<<< HEAD:backend/my-api/server.js
-=======
 
->>>>>>> aabd1faaf1d77a4c870ae15e3f589877ea35501e:server.js
 
 // Serve uploaded files statically
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
