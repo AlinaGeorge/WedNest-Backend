@@ -39,6 +39,9 @@ const upload = multer({ storage });
 // Middleware for multiple images (max 5)
 const uploadMultiple = upload.array('serviceImages', 5);
 
+app.get("/", (req, res) => {
+  res.send("Backend is running!");
+});
 
 // ✅ REGISTER API
 app.post('/api/register', async (req, res) => {
@@ -312,6 +315,7 @@ app.get('/api/vendor/dashboard/:user_id', async (req, res) => {
 });
 
 //✅ Specific type of vendors
+
 app.get('/api/vendors/type/:vendorType', async (req, res) => {
     const { vendorType } = req.params;
 
