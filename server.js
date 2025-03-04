@@ -18,7 +18,7 @@ const SECRET_KEY = process.env.JWT_SECRET || 'your_jwt_secret';
 // Connect to database
 connectDB();
 app.use(express.json());
-app.use(cors({ origin: "https://wednest-frontend.vercel.app" }));
+app.use(cors({ origin: "https://wednest-frontend.vercel.app", credentials: true }));
 
 
 // Serve uploaded files statically
