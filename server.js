@@ -3,42 +3,48 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 const dotenv = require('dotenv');
 const jwt = require('jsonwebtoken');
-const cors = require("cors");
-const multer = require('multer');
-const path = require('path'); 
+const cors = require("cors");;
 const connectDB = require('./db');
 const Couple = require('./models/Couple');
 const Vendor = require('./models/Vendor');
-
+const Request = require('./models/Request');
+const { upload } = require('./cloudinaryConfig');
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 const SECRET_KEY = process.env.JWT_SECRET || 'your_jwt_secret';
-
+const URL = process.env.BACKEND_URL || 'http://localhost:3000';
 // Connect to database
 connectDB();
+
 app.use(express.json());
-app.use(cors());
 
-// Serve uploaded files statically
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// Multer setup for file uploads
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'uploads/'); // Store files in the 'uploads' directory
-    },
-    filename: (req, file, cb) => {
-        cb(null, Date.now() + '-' + file.originalname); // Unique file naming
+// ✅ CORS FIX
+app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "https://wednest-frontend-orcin.vercel.app"); 
+    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.header("Access-Control-Allow-Credentials", "true");
+    
+    if (req.method === "OPTIONS") {
+        return res.sendStatus(200);
     }
+    next();
 });
 
-const upload = multer({ storage });
+app.use(cors({
+    origin: [
+        "http://localhost:3000", 
+        "https://wednest-frontend-orcin.vercel.app"
+    ],
+    credentials: true
+}));
 
-// Middleware for multiple images (max 5)
-const uploadMultiple = upload.array('serviceImages', 5);
 
-
+app.get("/", (req, res) => {
+  res.send("Backend is running!");
+});
+//
 // ✅ REGISTER API
 app.post('/api/register', async (req, res) => {
     const { username, email, password, user_type } = req.body;
@@ -129,7 +135,7 @@ app.put('/api/couple/profile', upload.single('profileImage'), async (req, res) =
         return res.status(400).json({ status: "error", message: "User ID is required" });
     }
 
-    // Trim user_id and validate format
+    // Validate user_id format
     user_id = user_id.trim();
     if (!mongoose.Types.ObjectId.isValid(user_id)) {
         return res.status(400).json({ status: "error", message: "Invalid User ID format" });
@@ -144,9 +150,7 @@ app.put('/api/couple/profile', upload.single('profileImage'), async (req, res) =
         };
 
         if (req.file) {
-            const imageUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
-            updatedData.profile_image = imageUrl;
-            
+            updatedData.profile_image = req.file.path; // Cloudinary URL
         }
 
         const updatedCouple = await Couple.findByIdAndUpdate(user_id, updatedData, { new: true });
@@ -161,6 +165,7 @@ app.put('/api/couple/profile', upload.single('profileImage'), async (req, res) =
         res.status(500).json({ status: "error", message: "Server error" });
     }
 });
+
 
 // ✅ GET COUPLE PROFILE API
 app.get('/api/couple/profile/:user_id', async (req, res) => {
@@ -229,11 +234,11 @@ app.put('/api/vendor/profile', upload.fields([{ name: 'profileImage', maxCount: 
         let updatedData = { businessName, vendorType, contactNumber, location, pricing, serviceDescription };
 
         if (req.files.profileImage) {
-            updatedData.profile_image = `${req.protocol}://${req.get("host")}/uploads/${req.files.profileImage[0].filename}`;
+            updatedData.profile_image = req.files.profileImage[0].path; // Cloudinary URL
         }
 
         if (req.files.serviceImages) {
-            updatedData.service_images = req.files.serviceImages.map(file => `${req.protocol}://${req.get("host")}/uploads/${file.filename}`);
+            updatedData.service_images = req.files.serviceImages.map(file => file.path);
         }
 
         const updatedVendor = await Vendor.findByIdAndUpdate(user_id.trim(), updatedData, { new: true });
@@ -248,6 +253,7 @@ app.put('/api/vendor/profile', upload.fields([{ name: 'profileImage', maxCount: 
         res.status(500).json({ status: "error", message: "Server error" });
     }
 });
+
 
 // ✅ GET VENDOR PROFILE API
 app.get('/api/vendor/profile/:vendor_id', async (req, res) => {
@@ -349,7 +355,62 @@ app.get('/api/vendor/details/:vendor_id', async (req, res) => {
         res.status(500).json({ status: "error", message: "Server error" });
     }
 });
+// ✅ SEND REQUEST API
+app.post('/api/request', async (req, res) => {
+    const {couple_id, vendor_id}=req.body;
+    if(!couple_id || !vendor_id){
+        return res.status(400).json({status: "error", message: "Couple ID and Vendor ID are required"});
+    }
+    try{
+        const existingRequest=await Request.findOne({couple_id, vendor_id, status: "Pending"});
+        if(existingRequest){
+            return res.status(400).json({status: "error", message: "Request already sent waiting for response"});
+        }
+        // Create new request
+        const newRequest=new Request({couple_id, vendor_id});
+        await newRequest.save();
+        res.status(201).json({status: "success", message: "Request sent successfully"});
+    }catch(error){
+        console.error("Send Request Error:", error);
+        res.status(500).json({status: "error", message: "Server error"});
 
+    }
+});
+app.get("/api/couple/requests/:couple_id", async (req, res) => {
+    const { couple_id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(couple_id)) {
+        return res.status(400).json({ status: "error", message: "Invalid Couple ID" });
+    }
+
+    try {
+        const requests = await Request.find({ couple_id })
+            .populate("vendor_id", "username businessName vendorType");
+
+        res.status(200).json({ status: "success", data: requests });
+    } catch (error) {
+        console.error("Fetch Requests Error:", error);
+        res.status(500).json({ status: "error", message: "Server error" });
+    }
+});
+
+app.get("/api/vendor/requests/:vendor_id", async (req, res) => {
+    const { vendor_id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(vendor_id)) {
+        return res.status(400).json({ status: "error", message: "Invalid Vendor ID" });
+    }
+
+    try {
+        const requests = await Request.find({ vendor_id })
+            .populate("couple_id", "username email");
+
+        res.status(200).json({ status: "success", data: requests });
+    } catch (error) {
+        console.error("Fetch Requests Error:", error);
+        res.status(500).json({ status: "error", message: "Server error" });
+    }
+});
 
 // ✅ SERVER START
 app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
