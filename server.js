@@ -396,23 +396,35 @@ app.get("/api/couple/requests/:couple_id", async (req, res) => {
     }
 });
 
-app.get("/api/vendor/requests/:vendor_id", async (req, res) => {
+app.get('/api/vendor-requests/:vendor_id', async (req, res) => {
     const { vendor_id } = req.params;
-
-    if (!mongoose.Types.ObjectId.isValid(vendor_id)) {
-        return res.status(400).json({ status: "error", message: "Invalid Vendor ID" });
+  
+    if (!mongoose.Types.ObjectId.isValid(vendor_id.trim())) {
+      return res.status(400).json({ status: "error", message: "Invalid Vendor ID format" });
     }
-
+  
     try {
-        const requests = await Request.find({ vendor_id })
-            .populate("couple_id", "username email");
-
-        res.status(200).json({ status: "success", data: requests });
+      const requests = await Request.find({ vendor_id })
+        .populate('couple_id', 'username wedding_date');
+  
+      if (requests.length === 0) {
+        return res.status(200).json({ status: "success", data: [], message: "No requests found." });
+      }
+  
+      const formattedRequests = requests.map(req => ({
+        _id: req._id,
+        coupleName: req.couple_id?.username || "Unknown",
+        eventDate: req.couple_id?.wedding_date || "N/A",
+        status: req.status
+      }));
+  
+      res.status(200).json(formattedRequests);
     } catch (error) {
-        console.error("Fetch Requests Error:", error);
-        res.status(500).json({ status: "error", message: "Server error" });
+      console.error("Fetch Vendor Requests Error:", error);
+      res.status(500).json({ status: "error", message: "Server error" });
     }
-});
+  });
+  
 
 app.get("/api/request-id", async (req, res) => {
     const { couple_id, vendor_id } = req.query;
@@ -489,6 +501,62 @@ app.get("/api/request-id", async (req, res) => {
       res.status(500).json({ status: "error", message: "Server error" });
     }
   });
+
+// Add the API to fetch vendor-specific requests
+app.get('/api/vendor-requests/:vendor_id', async (req, res) => {
+    const { vendor_id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(vendor_id.trim())) {
+        return res.status(400).json({ status: "error", message: "Invalid Vendor ID format" });
+    }
+
+    try {
+        const requests = await Request.find({ vendor_id })
+            .populate('couple_id', 'username wedding_date');
+
+        const formattedRequests = requests.map(req => ({
+            _id: req._id,
+            coupleName: req.couple_id.username,
+            eventDate: req.couple_id.wedding_date,
+            status: req.status
+        }));
+
+        res.status(200).json(formattedRequests);
+    } catch (error) {
+        console.error("Fetch Vendor Requests Error:", error);
+        res.status(500).json({ status: "error", message: "Server error" });
+    }
+});
+
+// Accept or Decline a request
+app.put('/api/vendor-requests/:request_id/:action', async (req, res) => {
+    const { request_id, action } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(request_id.trim())) {
+        return res.status(400).json({ status: "error", message: "Invalid Request ID format" });
+    }
+
+    if (!['accept', 'decline'].includes(action)) {
+        return res.status(400).json({ status: "error", message: "Invalid action" });
+    }
+
+    try {
+        const updatedRequest = await Request.findByIdAndUpdate(
+            request_id.trim(),
+            { status: action === 'accept' ? 'Accepted' : 'Declined' },
+            { new: true }
+        );
+
+        if (!updatedRequest) {
+            return res.status(404).json({ status: "error", message: "Request not found" });
+        }
+
+        res.status(200).json({ status: "success", message: `Request ${action}ed successfully` });
+    } catch (error) {
+        console.error("Update Request Error:", error);
+        res.status(500).json({ status: "error", message: "Server error" });
+    }
+});
   
 // get couple's budget api
 app.get("/api/couple/budget/:couple_id", async (req, res) => {
@@ -576,6 +644,7 @@ app.get('/api/cart/:couple_id', async (req, res) => {
         res.status(500).json({ status: "error", message: "Server error" });
     }
 });
+
   
 // ✅ SERVER START
 app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
