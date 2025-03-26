@@ -22,7 +22,7 @@ app.use(express.json());
 
 // ✅ CORS FIX
 app.use((req, res, next) => {
-    res.header("Access-Control-Allow-Origin", "https://wednest-frontend.vercel.app"); 
+    res.header("Access-Control-Allow-Origin", "https://wednest-frontend-orcin.vercel.app"); 
     res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
     res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
     res.header("Access-Control-Allow-Credentials", "true");
@@ -36,7 +36,7 @@ app.use((req, res, next) => {
 app.use(cors({
     origin: [
         "http://localhost:3000", 
-        "https://wednest-frontend.vercel.app"
+        "https://wednest-frontend-orcin.vercel.app"
     ],
     credentials: true
 }));
@@ -396,35 +396,23 @@ app.get("/api/couple/requests/:couple_id", async (req, res) => {
     }
 });
 
-app.get('/api/vendor-requests/:vendor_id', async (req, res) => {
+app.get("/api/vendor/requests/:vendor_id", async (req, res) => {
     const { vendor_id } = req.params;
-  
-    if (!mongoose.Types.ObjectId.isValid(vendor_id.trim())) {
-      return res.status(400).json({ status: "error", message: "Invalid Vendor ID format" });
+
+    if (!mongoose.Types.ObjectId.isValid(vendor_id)) {
+        return res.status(400).json({ status: "error", message: "Invalid Vendor ID" });
     }
-  
+
     try {
-      const requests = await Request.find({ vendor_id })
-        .populate('couple_id', 'username wedding_date');
-  
-      if (requests.length === 0) {
-        return res.status(200).json({ status: "success", data: [], message: "No requests found." });
-      }
-  
-      const formattedRequests = requests.map(req => ({
-        _id: req._id,
-        coupleName: req.couple_id?.username || "Unknown",
-        eventDate: req.couple_id?.wedding_date || "N/A",
-        status: req.status
-      }));
-  
-      res.status(200).json(formattedRequests);
+        const requests = await Request.find({ vendor_id })
+            .populate("couple_id", "username email wedding_date");
+
+        res.status(200).json({ status: "success", data: requests });
     } catch (error) {
-      console.error("Fetch Vendor Requests Error:", error);
-      res.status(500).json({ status: "error", message: "Server error" });
+        console.error("Fetch Requests Error:", error);
+        res.status(500).json({ status: "error", message: "Server error" });
     }
-  });
-  
+});
 
 app.get("/api/request-id", async (req, res) => {
     const { couple_id, vendor_id } = req.query;
@@ -455,8 +443,41 @@ app.get("/api/request-id", async (req, res) => {
     }
   });
   
+// ✅ ACCEPT/DECLINE REQUEST API
+app.put('/api/request/:request_id', async (req, res) => {
+    const { request_id } = req.params;
+    const { status } = req.body;
 
-  app.post("/api/cart/add", async (req, res) => {
+    if (!mongoose.Types.ObjectId.isValid(request_id.trim())) {
+        return res.status(400).json({ status: "error", message: "Invalid Request ID format" });
+    }
+
+    if (!["Accepted", "Declined"].includes(status)) {
+        return res.status(400).json({ status: "error", message: "Invalid status. Must be 'Accepted' or 'Declined'" });
+    }
+
+    try {
+        let request;
+        if (status === "Declined") {
+            request = await Request.findByIdAndDelete(request_id.trim());
+            if (!request) {
+                return res.status(404).json({ status: "error", message: "Request not found" });
+            }
+            return res.status(200).json({ status: "success", message: "Request declined and deleted successfully" });
+        } else {
+            request = await Request.findByIdAndUpdate(request_id.trim(), { status }, { new: true });
+            if (!request) {
+                return res.status(404).json({ status: "error", message: "Request not found" });
+            }
+            return res.status(200).json({ status: "success", message: `Request ${status.toLowerCase()} successfully`, data: request });
+        }
+    } catch (error) { // Corrected the syntax error here
+        console.error("Update Request Status Error:", error);
+        res.status(500).json({ status: "error", message: "Server error" });
+    }
+});
+// ✅ ADD TO CART API
+app.post("/api/cart/add", async (req, res) => {
     const { couple_id, vendor_id, service_type, price, request_id } = req.body;
   
     if (!couple_id || !vendor_id || !service_type || !price || !request_id) {
@@ -501,62 +522,6 @@ app.get("/api/request-id", async (req, res) => {
       res.status(500).json({ status: "error", message: "Server error" });
     }
   });
-
-// Add the API to fetch vendor-specific requests
-app.get('/api/vendor-requests/:vendor_id', async (req, res) => {
-    const { vendor_id } = req.params;
-
-    if (!mongoose.Types.ObjectId.isValid(vendor_id.trim())) {
-        return res.status(400).json({ status: "error", message: "Invalid Vendor ID format" });
-    }
-
-    try {
-        const requests = await Request.find({ vendor_id })
-            .populate('couple_id', 'username wedding_date');
-
-        const formattedRequests = requests.map(req => ({
-            _id: req._id,
-            coupleName: req.couple_id.username,
-            eventDate: req.couple_id.wedding_date,
-            status: req.status
-        }));
-
-        res.status(200).json(formattedRequests);
-    } catch (error) {
-        console.error("Fetch Vendor Requests Error:", error);
-        res.status(500).json({ status: "error", message: "Server error" });
-    }
-});
-
-// Accept or Decline a request
-app.put('/api/vendor-requests/:request_id/:action', async (req, res) => {
-    const { request_id, action } = req.params;
-
-    if (!mongoose.Types.ObjectId.isValid(request_id.trim())) {
-        return res.status(400).json({ status: "error", message: "Invalid Request ID format" });
-    }
-
-    if (!['accept', 'decline'].includes(action)) {
-        return res.status(400).json({ status: "error", message: "Invalid action" });
-    }
-
-    try {
-        const updatedRequest = await Request.findByIdAndUpdate(
-            request_id.trim(),
-            { status: action === 'accept' ? 'Accepted' : 'Declined' },
-            { new: true }
-        );
-
-        if (!updatedRequest) {
-            return res.status(404).json({ status: "error", message: "Request not found" });
-        }
-
-        res.status(200).json({ status: "success", message: `Request ${action}ed successfully` });
-    } catch (error) {
-        console.error("Update Request Error:", error);
-        res.status(500).json({ status: "error", message: "Server error" });
-    }
-});
   
 // get couple's budget api
 app.get("/api/couple/budget/:couple_id", async (req, res) => {
@@ -638,13 +603,36 @@ app.get('/api/cart/:couple_id', async (req, res) => {
 
         await cart.save();
 
-        res.status(200).json({ status: "success", message: "Item removed from cart" });
+        // Remove the associated request
+        await Request.findOneAndDelete({ couple_id, vendor_id });
+
+        res.status(200).json({ status: "success", message: "Item removed from cart and associated request deleted" });
     } catch (error) {
         console.error("Remove from Cart Error:", error);
         res.status(500).json({ status: "error", message: "Server error" });
     }
 });
+// ✅ GET REQUEST STATUS API
+app.get('/api/request/status/:request_id', async (req, res) => {
+    const { request_id } = req.params;
 
-  
+    if (!mongoose.Types.ObjectId.isValid(request_id.trim())) {
+        return res.status(400).json({ status: "error", message: "Invalid Request ID format" });
+    }
+
+    try {
+        const request = await Request.findById(request_id.trim());
+
+        if (!request) {
+            return res.status(404).json({ status: "error", message: "Request not found" });
+        }
+
+        res.status(200).json({ status: "success", data: { status: request.status } });
+    } catch (error) {
+        console.error("Get Request Status Error:", error);
+        res.status(500).json({ status: "error", message: "Server error" });
+    }
+});
+
 // ✅ SERVER START
 app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
